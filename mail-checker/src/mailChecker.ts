@@ -1,0 +1,16 @@
+import {CronJob} from "cron";
+import {Logger} from "./logging";
+import {config} from "../config/default";
+import {CheckerApp} from "./app";
+
+const logger = Logger.init(...config.loggers!);
+const app = new CheckerApp(logger);
+
+new CronJob({
+    cronTime: `*/${config.check_interval_minutes} * * * *`,
+    runOnInit: true,
+    onTick: async () => {
+        await app.checkMail();
+    }
+})
+    .start();
