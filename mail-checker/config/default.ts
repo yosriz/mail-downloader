@@ -1,7 +1,7 @@
 import {Config} from "../src/config";
 
 export const config: Config = {
-    check_interval_minutes: 1,
+    check_interval_minutes: 5,
     loggers: [
         {
             name: "console",
