@@ -2,3 +2,5 @@
 node_modules
 bin
 coverage
+mail-checker/config/credentials.json
+mail-checker/config/token.json
