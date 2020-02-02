@@ -1,5 +1,5 @@
 import * as winston from "winston";
-import {FileTransportOptions, GenericTextTransportOptions, GenericTransportOptions} from "winston";
+import { FileTransportOptions, GenericTextTransportOptions, GenericTransportOptions } from "winston";
 
 export interface LogTarget {
     name: string;
@@ -71,7 +71,7 @@ function mergeOptions(defaults: WinstonTransportOptions, options: WinstonTranspo
 }
 
 export interface Logger {
-    error(message: string, options?: object): void;
+    error(message: string, err?: any, options?: object): void;
 
     warn(message: string, options?: object): void;
 
@@ -91,20 +91,24 @@ export namespace Logger {
         });
 
         return {
-            error: (message: string, options?: object) => {
-                winstonLogger.error(message, {...options});
+            error: (message: string, error?: any, options?: object) => {
+                const data = {
+                    error: error ? error.toString() : undefined,
+                    ...options
+                }
+                winstonLogger.error(message, data);
             },
             warn: (message: string, options?: object) => {
-                winstonLogger.warn(message, {...options});
+                winstonLogger.warn(message, { ...options });
             },
             verbose: (message: string, options?: object) => {
-                winstonLogger.verbose(message, {...options});
+                winstonLogger.verbose(message, { ...options });
             },
             info: (message: string, options?: object) => {
-                winstonLogger.info(message, {...options});
+                winstonLogger.info(message, { ...options });
             },
             debug: (message: string, options?: object) => {
-                winstonLogger.debug(message, {...options});
+                winstonLogger.debug(message, { ...options });
             }
         };
     }

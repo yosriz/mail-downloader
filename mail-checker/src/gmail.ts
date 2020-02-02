@@ -1,11 +1,15 @@
-import {google} from 'googleapis';
-import {Logger} from "./logging";
+import { google, gmail_v1 } from 'googleapis';
+import { Logger } from "./logging";
 import * as fs from "fs";
 import * as readline from "readline";
-import {OAuth2Client} from "google-auth-library";
+import { OAuth2Client } from "google-auth-library";
 import * as util from "util";
 
+export type Message = gmail_v1.Schema$Message
+
+var appRoot = require('app-root-path');
 const asyncWriteFile = util.promisify(fs.writeFile);
+const asyncOpenFile = util.promisify(fs.open);
 const asyncReadFile = util.promisify(fs.readFile);
 
 export class GMail {
@@ -14,8 +18,10 @@ export class GMail {
     // The file token.json stores the user's access and refresh tokens, and is
     // created automatically when the authorization flow completes for the first
     // time.
-    private readonly TOKEN_PATH = 'token.json';
+    private readonly TOKEN_PATH = appRoot + '/config/token.json';
+    private readonly CREDENTIALS_PATH = appRoot + '/config/credentials.json'
     private authClient?: OAuth2Client;
+    private gmail?: gmail_v1.Gmail;
 
     constructor(private logger: Logger) {
         this.logger = logger;
@@ -26,8 +32,14 @@ export class GMail {
     }
 
     public async authenticate(): Promise<void> {
-        const content = await asyncReadFile('config/credentials.json');
+        try {
+            await asyncOpenFile(this.CREDENTIALS_PATH, 'r');
+        } catch (e) {
+            throw new Error("Cannot open credentials file! " + e.message);
+        }
+        const content = await asyncReadFile(this.CREDENTIALS_PATH);
         this.authClient = await this.authorize(JSON.parse(content as any));
+        this.gmail = google.gmail({ version: 'v1', auth: this.authClient as any });
     }
 
     /**
@@ -36,8 +48,8 @@ export class GMail {
      * @param {Object} credentials The authorization client credentials.
      * @param {function} callback The callback to call with the authorized client.
      */
-    async authorize(credentials: any): Promise<OAuth2Client> {
-        const {client_secret, client_id, redirect_uris} = credentials.installed;
+    private async authorize(credentials: any): Promise<OAuth2Client> {
+        const { client_secret, client_id, redirect_uris } = credentials.installed;
         const oAuth2Client = new OAuth2Client(
             client_id, client_secret, redirect_uris[0]);
 
@@ -46,6 +58,7 @@ export class GMail {
             const token = await asyncReadFile(this.TOKEN_PATH);
             oAuth2Client.setCredentials(JSON.parse(token as any));
         } catch (e) {
+            this.logger.error(`cannot read token file!`, { error: e });
             await this.getNewToken(oAuth2Client);
         }
         return oAuth2Client;
@@ -75,9 +88,10 @@ export class GMail {
                         reject(err);
                     else {
                         oAuth2Client.setCredentials(token);
+
                         // Store the token to disk for later program executions
                         await asyncWriteFile(this.TOKEN_PATH, JSON.stringify(token));
-                        this.logger.debug('Token stored to' + this.TOKEN_PATH);
+                        this.logger.debug(`Token stored in ${this.TOKEN_PATH}`);
                         resolve();
                     }
                 });
@@ -92,8 +106,8 @@ export class GMail {
      */
     listLabels(): Promise<any> {
         return new Promise<any>((resolve, reject) => {
-            const gmail = google.gmail({version: 'v1', auth: this.authClient as any});
-            gmail.users.labels.list({
+            this.validateInit(reject);
+            this.gmail!!.users.labels.list({
                 userId: 'me',
             }, (err, res: any) => {
                 if (err)
@@ -102,11 +116,54 @@ export class GMail {
                 if (labels.length) {
                     resolve(labels);
                 } else {
-                    reject('No labels found.');
+                    reject(new Error('No labels found.'));
                 }
             });
         });
     }
 
+    private validateInit(reject: any) {
+        if (!this.gmail) {
+            reject(new Error("GMail is not authenticate yet."));
+        }
+    }
 
+    public async getLastMessagesIds(msgNum: number, query: string): Promise<Message[]> {
+        return new Promise<Message[]>((resolve, reject) => {
+            this.validateInit(reject);
+            this.gmail!!.users.messages.list({
+                userId: 'me',
+                q: query,
+                maxResults: 10
+            }, (err: any, res: any) => {
+                if (err)
+                    reject('The API returned an error: ' + err);
+                const data = res.data as gmail_v1.Schema$ListMessagesResponse;
+                if (data.messages) {
+                    resolve(data.messages);
+                } else {
+                    reject('No messages found.');
+                }
+            });
+        });
+    }
+
+    public async getMessage(msgId: string): Promise<Message> {
+        return new Promise<Message>((resolve, reject) => {
+            this.validateInit(reject);
+            this.gmail!!.users.messages.get({
+                userId: 'me',
+                id: msgId
+            }, (err: any, res: any) => {
+                if (err)
+                    reject('The API returned an error: ' + err);
+                const data = res.data as Message;
+                if (data) {
+                    resolve(data);
+                } else {
+                    reject('No messages found.');
+                }
+            });
+        });
+    }
 }
