@@ -1,6 +1,6 @@
 import { google, gmail_v1 } from 'googleapis';
 import { Logger } from "./logging";
-import * as fs from "fs";
+import * as fs from "fs-extra"
 import * as readline from "readline";
 import { OAuth2Client } from "google-auth-library";
 import * as util from "util";
@@ -8,9 +8,6 @@ import * as util from "util";
 export type Message = gmail_v1.Schema$Message
 
 var appRoot = require('app-root-path');
-const asyncWriteFile = util.promisify(fs.writeFile);
-const asyncOpenFile = util.promisify(fs.open);
-const asyncReadFile = util.promisify(fs.readFile);
 
 export class GMail {
 
@@ -33,12 +30,12 @@ export class GMail {
 
     public async authenticate(): Promise<void> {
         try {
-            await asyncOpenFile(this.CREDENTIALS_PATH, 'r');
+            await fs.pathExists(this.CREDENTIALS_PATH);
         } catch (e) {
             throw new Error("Cannot open credentials file! " + e.message);
         }
-        const content = await asyncReadFile(this.CREDENTIALS_PATH);
-        this.authClient = await this.authorize(JSON.parse(content as any));
+        const content = await fs.readJson(this.CREDENTIALS_PATH);
+        this.authClient = await this.authorize(content);
         this.gmail = google.gmail({ version: 'v1', auth: this.authClient as any });
     }
 
@@ -55,8 +52,8 @@ export class GMail {
 
         // Check if we have previously stored a token.
         try {
-            const token = await asyncReadFile(this.TOKEN_PATH);
-            oAuth2Client.setCredentials(JSON.parse(token as any));
+            const token = await fs.readJson(this.TOKEN_PATH);
+            oAuth2Client.setCredentials(token);
         } catch (e) {
             this.logger.error(`cannot read token file!`, { error: e });
             await this.getNewToken(oAuth2Client);
@@ -90,7 +87,7 @@ export class GMail {
                         oAuth2Client.setCredentials(token);
 
                         // Store the token to disk for later program executions
-                        await asyncWriteFile(this.TOKEN_PATH, JSON.stringify(token));
+                        await fs.writeJSON(this.TOKEN_PATH, token);
                         this.logger.debug(`Token stored in ${this.TOKEN_PATH}`);
                         resolve();
                     }

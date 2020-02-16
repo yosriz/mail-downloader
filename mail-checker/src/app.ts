@@ -16,13 +16,12 @@ export class CheckerApp {
             if (!this.gmail.isAuthenticate) {
                 await this.gmail.authenticate();
             }
-            const msgs: Message[] = await this.gmail.getLastMessagesIds(10, "from:brooks-keret.co.il");            
-            let msgsNames = "";
-            msgs.forEach(async  msg => {
-                const fullMsg = await this.gmail.getMessage(msg.id!!);
-                msgsNames += msg.snippet + " .";
-            });
-            this.logger.debug('Messages: ' + msgsNames);
+            const msgs: Message[] = await this.gmail.getLastMessagesIds(10, "from:");
+            let mails = new Array<Message>();
+            for (const msg of msgs){
+                mails.push(await this.gmail.getMessage(msg.id!!));                
+            }
+            
         } catch (e) {
             this.logger.error("checkMail failed!", e);
         }
